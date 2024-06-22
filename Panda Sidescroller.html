@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panda Side-Scroller</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #gameCanvas { background: #87CEEB; }
+        .game-svg { display: none; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <svg class="game-svg" id="panda-svg" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="45" fill="white"/>
+        <circle cx="35" cy="40" r="10" fill="black"/>
+        <circle cx="65" cy="40" r="10" fill="black"/>
+        <ellipse cx="50" cy="70" rx="15" ry="10" fill="black"/>
+        <path d="M30 20Q50 5 70 20M20 50Q5 70 20 90M80 50Q95 70 80 90" fill="none" stroke="black" stroke-width="5"/>
+        <ellipse cx="25" cy="60" rx="12" ry="8" fill="black" transform="rotate(-20 25 60)"/>
+        <ellipse cx="75" cy="60" rx="12" ry="8" fill="black" transform="rotate(20 75 60)"/>
+    </svg>
+
+    <svg class="game-svg" id="spider-svg" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="30" fill="black"/>
+        <circle cx="40" cy="40" r="5" fill="red"/>
+        <circle cx="60" cy="40" r="5" fill="red"/>
+        <path d="M20 50Q10 60 0 50M80 50Q90 60 100 50M20 60Q10 70 0 70M80 60Q90 70 100 70M30 80Q40 90 50 100M70 80Q60 90 50 100" fill="none" stroke="black" stroke-width="4"/>
+    </svg>
+
+    <svg class="game-svg" id="block-svg" viewBox="0 0 100 100">
+        <rect width="100" height="100" fill="#8B4513"/>
+        <rect x="5" y="5" width="90" height="20" fill="#D2691E"/>
+        <rect x="5" y="30" width="90" height="20" fill="#D2691E"/>
+        <rect x="5" y="55" width="90" height="20" fill="#D2691E"/>
+        <rect x="5" y="80" width="90" height="15" fill="#D2691E"/>
+        <path d="M0 25H100M0 50H100M0 75H100M50 0V100M25 30V50M75 55V75" stroke="#8B4513" stroke-width="2"/>
+    </svg>
+
+    <svg class="game-svg" id="grass-svg" viewBox="0 0 100 100">
+        <rect width="100" height="100" fill="#228B22"/>
+        <path d="M0 20Q10 10 20 20T40 20T60 20T80 20T100 20M0 40Q10 30 20 40T40 40T60 40T80 40T100 40M0 60Q10 50 20 60T40 60T60 60T80 60T100 60M0 80Q10 70 20 80T40 80T60 80T80 80T100 80M0 100Q10 90 20 100T40 100T60 100T80 100T100 100" fill="none" stroke="#32CD32" stroke-width="2"/>
+    </svg>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 800; canvas.height = 400;
+
+        const panda = {x: 50, y: 350, width: 40, height: 40, speed: 5, jumpForce: 12, yVelocity: 0, isJumping: false};
+        const gravity = 0.6, ground = canvas.height - 50;
+        let gameObjects = [], particles = [], cameraX = 0;
+
+        // Pre-render SVGs to canvases
+        const svgElements = {'panda': 40, 'spider': 40, 'block': 40, 'grass': 50};
+        const renderedSVGs = {};
+
+        for (const [key, size] of Object.entries(svgElements)) {
+            const svgString = new XMLSerializer().serializeToString(document.getElementById(key + '-svg'));
+            const img = new Image();
+            img.src = 'data:image/svg+xml;base64,' + btoa(svgString);
+            img.onload = function() {
+                const offscreenCanvas = document.createElement('canvas');
+                offscreenCanvas.width = size;
+                offscreenCanvas.height = size;
+                const offscreenCtx = offscreenCanvas.getContext('2d');
+                offscreenCtx.drawImage(img, 0, 0, size, size);
+                renderedSVGs[key] = offscreenCanvas;
+            }
+        }
+
+        function createObject(type, x, y) {
+            return type === 'block' ? {x, y, width: 40, height: 40, type: 'block', hit: false} :
+                                      {x, y, width: 40, height: 40, type: 'spider', direction: 1};
+        }
+
+        for (let i = 0; i < 100; i++) {
+            if (Math.random() < 0.3) gameObjects.push(createObject('block', i * 100, Math.random() * (canvas.height - 150) + 50));
+            if (Math.random() < 0.2) gameObjects.push(createObject('spider', i * 150, ground - 40));
+        }
+        gameObjects.push({x: 9900, y: ground - 100, width: 50, height: 100, type: 'flag'});
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (renderedSVGs['grass']) {
+                for (let i = 0; i < canvas.width / 50 + 1; i++) {
+                    ctx.drawImage(renderedSVGs['grass'], i * 50 - (cameraX % 50), ground, 50, 50);
+                }
+            }
+            
+            gameObjects.forEach(obj => {
+                if (obj.x - cameraX > -50 && obj.x - cameraX < canvas.width + 50) {
+                    if (obj.type === 'block' && !obj.hit && renderedSVGs['block']) {
+                        ctx.drawImage(renderedSVGs['block'], obj.x - cameraX, obj.y, obj.width, obj.height);
+                    } else if (obj.type === 'spider' && renderedSVGs['spider']) {
+                        ctx.drawImage(renderedSVGs['spider'], obj.x - cameraX, obj.y, obj.width, obj.height);
+                    } else if (obj.type === 'flag') {
+                        ctx.fillStyle = 'red';
+                        ctx.fillRect(obj.x - cameraX, obj.y, obj.width, obj.height);
+                    }
+                }
+            });
+            
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x - cameraX, p.y, p.size, p.size);
+            });
+            
+            if (renderedSVGs['panda']) {
+                ctx.drawImage(renderedSVGs['panda'], panda.x - cameraX, panda.y, panda.width, panda.height);
+            }
+        }
+
+        function update() {
+            panda.yVelocity += gravity;
+            panda.y += panda.yVelocity;
+            if (panda.y + panda.height > ground) {
+                panda.y = ground - panda.height;
+                panda.yVelocity = 0;
+                panda.isJumping = false;
+            }
+            cameraX = panda.x - canvas.width / 3;
+
+            gameObjects.forEach((obj, index) => {
+                if (obj.type === 'block' && !obj.hit && checkCollision(panda, obj)) {
+                    if (panda.yVelocity > 0 && panda.y + panda.height < obj.y + obj.height / 2) {
+                        panda.y = obj.y - panda.height;
+                        panda.yVelocity = 0;
+                        panda.isJumping = false;
+                    } else if (panda.yVelocity < 0 && panda.y > obj.y + obj.height / 2) {
+                        obj.hit = true;
+                        createParticles(obj.x + obj.width / 2, obj.y + obj.height);
+                        setTimeout(() => gameObjects.splice(index, 1), 100);
+                    }
+                } else if (obj.type === 'spider') {
+                    obj.x += obj.direction;
+                    if (Math.random() < 0.02) obj.direction *= -1;
+                    if (checkCollision(panda, obj)) {
+                        if (panda.yVelocity > 0 && panda.y + panda.height < obj.y + obj.height / 2) {
+                            gameObjects.splice(index, 1);
+                            panda.yVelocity = -panda.jumpForce / 2;
+                        } else {
+                            alert('Game Over!');
+                            panda.x = 50; panda.y = 350; cameraX = 0;
+                        }
+                    }
+                } else if (obj.type === 'flag' && checkCollision(panda, obj)) {
+                    alert('You Win!');
+                    panda.x = 50; panda.y = 350; cameraX = 0;
+                }
+            });
+
+            particles.forEach((p, index) => {
+                p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life--;
+                if (p.life <= 0) particles.splice(index, 1);
+            });
+
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function checkCollision(a, b) {
+            return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+        }
+
+        function createParticles(x, y) {
+            for (let i = 0; i < 10; i++) {
+                particles.push({
+                    x: x, y: y, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5,
+                    size: Math.random() * 5 + 2, color: '#8B4513', life: 30
+                });
+            }
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'a') panda.x -= panda.speed;
+            else if (e.key === 'd') panda.x += panda.speed;
+            else if (e.key === 'w' && !panda.isJumping) {
+                panda.yVelocity = -panda.jumpForce;
+                panda.isJumping = true;
+            }
+        });
+
+        // Start the game loop once all SVGs are rendered
+        let checkRendered = setInterval(() => {
+            if (Object.keys(renderedSVGs).length === Object.keys(svgElements).length) {
+                clearInterval(checkRendered);
+                update();
+            }
+        }, 100);
+    </script>
+</body>
+</html>

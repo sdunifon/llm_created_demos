@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic FPS Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let playerX = canvas.width / 2;
+        let playerY = canvas.height / 2;
+        let playerAngle = 0;
+
+        const mapSize = 16;
+        const tileSize = 32;
+        const map = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,1,1,1,1,0,0,1,1,1,1,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,0,1,1,1,1,0,0,1,1,1,1,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        function drawMap() {
+            for (let y = 0; y < mapSize; y++) {
+                for (let x = 0; x < mapSize; x++) {
+                    if (map[y][x] === 1) {
+                        ctx.fillStyle = '#666';
+                        ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+                    }
+                }
+            }
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(playerX, playerY, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = 'yellow';
+            ctx.beginPath();
+            ctx.moveTo(playerX, playerY);
+            ctx.lineTo(playerX + Math.cos(playerAngle) * 20, playerY + Math.sin(playerAngle) * 20);
+            ctx.stroke();
+        }
+
+        function castRays() {
+            const FOV = Math.PI / 3;
+            const rayCount = canvas.width;
+            const rayAngleStep = FOV / rayCount;
+
+            for (let i = 0; i < rayCount; i++) {
+                const rayAngle = playerAngle - FOV / 2 + rayAngleStep * i;
+                const ray = castRay(rayAngle);
+                drawRay(ray, i);
+            }
+        }
+
+        function castRay(angle) {
+            let rayX = playerX;
+            let rayY = playerY;
+            const rayStepX = Math.cos(angle);
+            const rayStepY = Math.sin(angle);
+
+            while (true) {
+                rayX += rayStepX;
+                rayY += rayStepY;
+
+                const mapX = Math.floor(rayX / tileSize);
+                const mapY = Math.floor(rayY / tileSize);
+
+                if (mapX < 0 || mapX >= mapSize || mapY < 0 || mapY >= mapSize) break;
+                if (map[mapY][mapX] === 1) return { x: rayX, y: rayY };
+            }
+
+            return null;
+        }
+
+        function drawRay(ray, rayIndex) {
+            if (!ray) return;
+
+            const distance = Math.sqrt((ray.x - playerX) ** 2 + (ray.y - playerY) ** 2);
+            const wallHeight = canvas.height / distance * 20;
+
+            ctx.fillStyle = `rgb(0, ${255 - distance * 2}, 0)`;
+            ctx.fillRect(rayIndex, (canvas.height - wallHeight) / 2, 1, wallHeight);
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            castRays();
+            drawMap();
+            drawPlayer();
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            const moveSpeed = 3;
+            const rotateSpeed = 0.1;
+
+            switch (e.key) {
+                case 'ArrowUp':
+                    playerX += Math.cos(playerAngle) * moveSpeed;
+                    playerY += Math.sin(playerAngle) * moveSpeed;
+                    break;
+                case 'ArrowDown':
+                    playerX -= Math.cos(playerAngle) * moveSpeed;
+                    playerY -= Math.sin(playerAngle) * moveSpeed;
+                    break;
+                case 'ArrowLeft':
+                    playerAngle -= rotateSpeed;
+                    break;
+                case 'ArrowRight':
+                    playerAngle += rotateSpeed;
+                    break;
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
